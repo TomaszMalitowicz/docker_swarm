@@ -156,3 +156,20 @@ v4q3ea3i3vwa        hungry_diffie.1     alpine:latest       node2               
 n0leadl5lbtl        hungry_diffie.2     alpine:latest       node3               Running             Running about a minute ago                       
 clc8rv90kc1w        hungry_diffie.3     alpine:latest       node1               Running             Running about a minute ago       
 ```
+
+
+### Swarm network
+
+`docker network create --driver overlay mydrupal` 
+docker@node1:~$ `docker network ls`  
+```                                                                                                          
+NETWORK ID          NAME                DRIVER              SCOPE
+ceaea198f33e        bridge              bridge              local
+fe867a30da6c        docker_gwbridge     bridge              local
+6ab1a782202c        host                host                local
+rsagum4kph3z        ingress             overlay             swarm
+<pre>
+<em>w4esb37qo7gy        mydrupal            overlay             swarm</em>
+</pre>
+1f68c0fd32c4        none                null                local
+```
