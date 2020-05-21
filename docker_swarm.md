@@ -173,3 +173,35 @@ rsagum4kph3z        ingress             overlay             swarm
 </pre>
 1f68c0fd32c4        none                null                local
 ```
+
+
+`docker service create --name psql --network mydrupal -e POSTGRES_PASSWORD=mypass postgres`  
+```
+k5bqo1vi8zwrjj15cyjpdpwsj
+overall progress: 1 out of 1 tasks 
+1/1: running   [==================================================>] 
+verify: Service converged 
+```
+`docker service create --name drupal --network mydrupal -p 80:80 drupal`  
+```
+lc0sy4pnsutasg7q2lbj8gzy8
+overall progress: 0 out of 1 tasks 
+overall progress: 0 out of 1 tasks 
+overall progress: 1 out of 1 tasks 
+1/1: running   [==================================================>] 
+verify: Service converged 
+```
+`docker service ls`  
+```                                                                                                          
+ID                  NAME                MODE                REPLICAS            IMAGE               PORTS
+lc0sy4pnsuta        drupal              replicated          1/1                 drupal:latest       *:80->80/tcp
+ex7l5v6e2pql        hungry_diffie       replicated          3/3                 alpine:latest       
+k5bqo1vi8zwr        psql                replicated          1/1                 postgres:latest     
+```
+
+`docker service ps drupal`  
+```                                                                                                   
+ID                  NAME                IMAGE               NODE                DESIRED STATE       CURRENT STATE                ERROR               PORTS
+d55rkw5bww8g        drupal.1            drupal:latest       node2               Running             Running about a minute ago
+```              
+docker@node1:~$ `docker service create --name search --replicas 3 -p 9200:9200 elasticsearch:2`  
