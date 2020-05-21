@@ -205,3 +205,28 @@ ID                  NAME                IMAGE               NODE                
 d55rkw5bww8g        drupal.1            drupal:latest       node2               Running             Running about a minute ago
 ```              
 docker@node1:~$ `docker service create --name search --replicas 3 -p 9200:9200 elasticsearch:2`  
+
+utworznie w docker swarm calej aplikacji.
+ilosc maszyn zmniejszona do 2. <- virtualka nie wyrabia.
+
+
+logujemy sie na node1.  
+tworzymy siec backend i frontend.  
+`
+`docker network create -d overlay backend`  
+`docker network create -d overlay frontend`  
+
+tworzymy serwis dla apliakcji do glosowania.  
+`docker service create --name vote -p 80:80 --network frontend --replicas 2 bretfisher/examplevotingapp_vote`  
+
+tworzymy serwis dla redisa:  
+`docker service create --name redis --network frontend --replicas 1 redis:3.2`  
+
+tworzymy serwis dla aplikacji worker.  
+`docker service create --name worker --network frontend --network backend bretfisher/examplevotingapp_worker:java`  
+
+tworzymy serwis dla bazy danych.  
+`docker service create --name db --network backend -e POSTGRES_HOST_AUTH_METHOD=trust --mount type=volume,source=db-data,target=/var/lib/postgresql/data postgres:9.4`  
+
+tworzymy serwis dla aplikacji wynik.  
+`docker service create --name result --network backend -p 5001:80 bretfisher/examplevotingapp_result`  
