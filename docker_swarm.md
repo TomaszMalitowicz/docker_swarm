@@ -420,3 +420,158 @@ tdjvoa5mt1rq        voteapp_redis        replicated          1/1                
 v5ygaih8z1c5        voteapp_worker       replicated          1/1                 bretfisher/examplevotingapp_worker:java     
 z1xr6o3gllp8        voteapp_vote         replicated          2/2                 bretfisher/examplevotingapp_vote:latest     *:5000->80/tcp
 ```
+
+
+### secrets
+metody na utworznie secreta:
+z pliku:
+`docker secret create psql_user psql_user.txt`  
+przy pomocy echo:
+`echo "mypasswd" | docker secret create psql_pass -` - oznacza poberz dane ze STDOUT czyli z polecenia echo  
+
+`docker secret ls` - wyswietla liste secretow
+```
+ID                          NAME                DRIVER              CREATED             UPDATED
+ui6lqpyvxrgt8hr2pwavshtsb   psql_pass                               7 seconds ago       7 seconds ago
+j608r18n4xorga6ijqpro54d1   psql_user                               20 seconds ago      20 seconds ago
+```
+`docker secret inspect psql_user`  
+
+```
+[
+    {
+        "ID": "j608r18n4xorga6ijqpro54d1",
+        "Version": {
+            "Index": 428
+        },
+        "CreatedAt": "2020-05-22T09:50:22.685475281Z",
+        "UpdatedAt": "2020-05-22T09:50:22.685475281Z",
+        "Spec": {
+            "Name": "psql_user",
+            "Labels": {}
+        }
+    }
+]
+```
+
+jak uzyc secretow w serwisach:
+`docker service create --name psql --secret psql_user --secret psql_pass -e POSTGRES_PASSWORD_FILE=/run//secrets/psql_pass -e POSTGRES_USER_FILE=/run/secrets/psql_user postgres`  
+
+`docker service ls`  
+```
+ID                  NAME                MODE                REPLICAS            IMAGE               PORTS
+1cu409npirv9        psql                replicated          1/1                 postgres:latest     
+```
+`docker service ps psql`  
+```
+ID                  NAME                IMAGE               NODE                DESIRED STATE       CURRENT STATE            ERROR               PORTS
+wh288696769l        psql.1              postgres:latest     node2               Running             Running 18 minutes ago                       
+```
+przechodzimy na node2 swarmowego aby zalogowac sie na contener psql.  
+`docker container ls`  
+```
+CONTAINER ID        IMAGE               COMMAND                  CREATED             STATUS              PORTS               NAMES
+93beaf0b4a7e        postgres:latest     "docker-entrypoint.s…"   22 minutes ago      Up 22 minutes       5432/tcp            psql.1.wh288696769lxtvhs336fbr07
+```
+`docker exec -it psql.1.wh288696769lxtvhs336fbr07 bash`  
+wyswietlamy zmienne srodowiskowe i sprawdzamy zawartosc plikow:  
+```
+root@93beaf0b4a7e:/# env
+HOSTNAME=93beaf0b4a7e
+POSTGRES_PASSWORD_FILE=/run/secrets/psql_pass
+PWD=/
+HOME=/root
+LANG=en_US.utf8
+GOSU_VERSION=1.12
+PG_MAJOR=12
+PG_VERSION=12.3-1.pgdg100+1
+TERM=xterm
+SHLVL=1
+POSTGRES_USER_FILE=/run/secrets/psql_user
+PGDATA=/var/lib/postgresql/data
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/lib/postgresql/12/bin
+_=/usr/bin/env
+root@93beaf0b4a7e:/# cat /run/secrets/psql_pass
+mypasswd
+root@93beaf0b4a7e:/# cat /run/secrets/psql_user
+mypsqluser
+```
+jak widac secrety sa podmontowane.  
+
+Sprawdzamy logi:  
+`docker logs psql.1.wh288696769lxtvhs336fbr07`  
+```
+The files belonging to this database system will be owned by user "postgres".
+This user must also own the server process.
+...
+fixing permissions on existing directory /var/lib/postgresql/data ... ok
+creating subdirectories ... ok
+...
+Success. You can now start the database server using:
+
+    pg_ctl -D /var/lib/postgresql/data -l logfile start
+
+...
+2020-05-22 10:06:00.179 UTC [1] LOG:  listening on IPv4 address "0.0.0.0", port 5432
+2020-05-22 10:06:00.181 UTC [1] LOG:  listening on IPv6 address "::", port 5432
+2020-05-22 10:06:00.200 UTC [1] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+2020-05-22 10:06:01.092 UTC [65] LOG:  database system was shut down at 2020-05-22 10:05:59 UTC
+2020-05-22 10:06:01.477 UTC [1] LOG:  database system is ready to accept connections
+```
+
+
+### Zmiany w secretach powoduje restart contenera z nowymi wartosciami.
+
+secret w pliku yml  
+
+```yml
+version: "3.1" #secrety sa obsugiwane od wersji 3.1
+
+services:
+  psql:
+    image: postgres
+    secrets:
+      - psql_user
+      - psql_password
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/secrets/psql_password
+      POSTGRES_USER_FILE: /run/secrets/psql_user
+
+secrets:
+  psql_user:
+    file: ./psql_user.txt
+  psql_password:
+    file: ./psql_password.txt
+```
+
+`ls -lt`
+```
+total 16
+-rw-r--r--    1 docker   staff            7 May 22 10:43 psql_password.txt
+-rw-r--r--    1 docker   staff           11 May 22 09:42 psql_user.txt
+-rw-r--r--    1 docker   staff         1765 May 22 09:21 stack.yml
+-rw-r--r--    1 docker   staff          327 May 22 10:59 stack_secrets.yml
+```
+
+`docker stack deploy -c stack_secrets.yml mydb`  
+```
+Creating network mydb_default
+Creating secret mydb_psql_user
+Creating secret mydb_psql_password
+Creating service mydb_psql
+```
+
+`docker secret ls`  
+```
+ID                          NAME                 DRIVER              CREATED             UPDATED
+ane5prlojkjmx215e5pa9447m   mydb_psql_password                       26 seconds ago      26 seconds ago
+n40qh7r4py1ug9vhjz56wi6ej   mydb_psql_user                           26 seconds ago      26 seconds ago
+```
+
+`docker stack rm mydb` - usuwa stack razem z secretami.
+```
+Removing service mydb_psql
+Removing secret mydb_psql_password
+Removing secret mydb_psql_user
+Removing network mydb_default
+```
