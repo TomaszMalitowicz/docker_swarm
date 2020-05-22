@@ -575,3 +575,85 @@ Removing secret mydb_psql_password
 Removing secret mydb_psql_user
 Removing network mydb_default
 ```
+
+
+utworzmy stack z drupalem.  
+`touch stack_drupal_secret.yml`  
+`vi stack_drupal_secret.yml`  
+```yml
+version: '3.1'
+
+services:
+  drupal:
+    image: drupal:8.2
+    ports:
+      - "8080:80"
+    volumes:
+      - drupal-modules:/var/www/html/modules
+      - drupal-profiles:/var/www/html/profiles       
+      - drupal-sites:/var/www/html/sites      
+      - drupal-themes:/var/www/html/themes
+ 
+  postgres:
+    image: postgres:9.6
+    environment:
+      - POSTGRES_PASSWORD_FILE=/run/secrets/psql-pw
+    secrets:
+        - psql-pw  
+    volumes:
+      - drupal-data:/var/lib/postgresql/data
+
+volumes:
+  drupal-data:
+  drupal-modules:
+  drupal-profiles:
+  drupal-sites:
+  drupal-themes:
+
+
+secrets:
+    psql-pw:
+      external: true  
+```
+tworzymy secret:  
+`echo "asdada3242" | docker secret create psql-pw -`  
+
+uruchamiania stack:  
+`docker stack deploy -c stack_drupal_secret.yml drupal`  
+`docker stack ps drupal`  
+```
+ID                  NAME                IMAGE               NODE                DESIRED STATE       CURRENT STATE              ERROR               PORTS
+sm7hdr57lq1z        drupal_postgres.1   postgres:9.6        node1               Running             Preparing 12 seconds ago                       
+x9k1a3b91a8k        drupal_drupal.1     drupal:8.2          node2               Running             Preparing 14 seconds ago                       
+```
+
+### Service updates
+
+podnosimy serwis.  
+`docker service create -p 8088:80 --name web nginx:1.13.7`  
+`docker service ls`  
+```
+ID                  NAME                MODE                REPLICAS            IMAGE               PORTS
+6o5qe7lp1uae        web                 replicated          1/1                 nginx:1.13.7        *:8088->80/tcp
+```
+skalujemy go do 5 kontenerow.   
+`docker service scale web=5`  
+```
+web scaled to 5
+overall progress: 5 out of 5 tasks 
+1/5: running   [==================================================>] 
+2/5: running   [==================================================>] 
+3/5: running   [==================================================>] 
+4/5: running   [==================================================>] 
+5/5: running   [==================================================>] 
+verify: Service converged 
+```
+zmieniamy obraz na wystkich kontenrerach.  Proces bedzie przebiega po koleji.
+`docker service update --image nginx:1.13.6 web`  
+
+
+zmiana portu tutaj trzeba udpstepniony port usunac i dodac nowy.  
+`docker service update --publish-rm 8088 --publish-add 9090:80 web`  
+
+docker tip - gdy maszyny=nody swarma nie sa zbalansowane np usunales serwis ktory zajomowa kilka nodow mozna przebalansowac cluster updatujac okreslone serwisy podczas updatu nowe kontenery trafia na najmniej obciazone nody swarma.  
+`docker service update --force web`  
