@@ -627,7 +627,7 @@ sm7hdr57lq1z        drupal_postgres.1   postgres:9.6        node1               
 x9k1a3b91a8k        drupal_drupal.1     drupal:8.2          node2               Running             Preparing 14 seconds ago                       
 ```
 
-### Service updates
+### Service scale updates
 
 podnosimy serwis.  
 `docker service create -p 8088:80 --name web nginx:1.13.7`  
@@ -657,3 +657,21 @@ zmiana portu tutaj trzeba udpstepniony port usunac i dodac nowy.
 
 docker tip - gdy maszyny=nody swarma nie sa zbalansowane np usunales serwis ktory zajomowa kilka nodow mozna przebalansowac cluster updatujac okreslone serwisy podczas updatu nowe kontenery trafia na najmniej obciazone nody swarma.  
 `docker service update --force web`  
+
+### healthchecks
+
+`docker container run --name p1 -d postgres`  
+`docker container run --name p2 -d -e POSTGRES_PASSWORD=mypass --health-cmd="pg_isready -U postgres || exit 1" postgres`  
+
+`docker container ls`   
+```
+CONTAINER ID        IMAGE               COMMAND                  CREATED              STATUS                            PORTS               NAMES
+5446133f587a        postgres            "docker-entrypoint.s…"   9 seconds ago        Up 8 seconds (health: starting)   5432/tcp            p2
+5e48e1cba9af        postgres            "docker-entrypoint.s…"   About a minute ago   Up About a minute                 5432/tcp            p1
+```
+`docker container ls`  
+```
+CONTAINER ID        IMAGE               COMMAND                  CREATED             STATUS                    PORTS               NAMES
+5446133f587a        postgres            "docker-entrypoint.s…"   40 seconds ago      Up 38 seconds (healthy)   5432/tcp            p2
+5e48e1cba9af        postgres            "docker-entrypoint.s…"   2 minutes ago       Up 2 minutes              5432/tcp            p1
+```
