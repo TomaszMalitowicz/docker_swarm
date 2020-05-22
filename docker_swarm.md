@@ -230,3 +230,193 @@ tworzymy serwis dla bazy danych.
 
 tworzymy serwis dla aplikacji wynik.  
 `docker service create --name result --network backend -p 5001:80 bretfisher/examplevotingapp_result`  
+
+
+
+### Stack
+
+Stack jest rodzajem docker compose. Tworzymy instrukcje w yml a polecenie stack uruchamia nam serwisy w clustrze swarmowym.  
+Dlaczego stack a nie compose ? Compose zostal stworzony dla zestawow developerskich aby np szybko cos sprawdzic.  
+Stack zostal stworzony dla zestawo testowych/pordukcyjnch nie bedzie budowal nam obrau - pominie comendy budowania - od tego jest inny serwer np jenkins.  
+
+`docker stack`  
+```
+Usage:	docker stack [OPTIONS] COMMAND
+
+Manage Docker stacks
+
+Options:
+      --orchestrator string   Orchestrator to use (swarm|kubernetes|all)
+
+Commands:
+  deploy      Deploy a new stack or update an existing stack
+  ls          List stacks
+  ps          List the tasks in the stack
+  rm          Remove one or more stacks
+  services    List the services in the stack
+
+Run 'docker stack COMMAND --help' for more information on a command.
+
+```
+
+`docker stack deploy -c nazwal_pliku.yml` 
+
+tworzymy plik.yml  
+touch stack.yml  
+w srodku umieszamy zawartosc:  
+```yml
+version: "3"
+services:
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379"
+    networks:
+      - frontend
+    deploy:
+      replicas: 1
+      update_config:
+        parallelism: 2
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+  db:
+    image: postgres:9.4
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      - backend
+    environment:
+      - POSTGRES_HOST_AUTH_METHOD=trust
+    deploy:
+      placement:
+        constraints: [node.role == manager]
+  vote:
+    image: bretfisher/examplevotingapp_vote
+    ports:
+      - 5000:80
+    networks:
+      - frontend
+    depends_on:
+      - redis
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 2
+      restart_policy:
+        condition: on-failure
+  result:
+    image: bretfisher/examplevotingapp_result
+    ports:
+      - 5001:80
+    networks:
+      - backend
+    depends_on:
+      - db
+    deploy:
+      replicas: 1
+      update_config:
+        parallelism: 2
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+
+  worker:
+    image: bretfisher/examplevotingapp_worker:java
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      - db
+      - redis
+    deploy:
+      mode: replicated
+      replicas: 1
+      labels: [APP=VOTING]
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 3
+        window: 120s
+      placement:
+        constraints: [node.role == manager]
+
+  visualizer:
+    image: dockersamples/visualizer
+    ports:
+      - "8080:8080"
+    stop_grace_period: 1m30s
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    deploy:
+      placement:
+        constraints: [node.role == manager]
+
+networks:
+  frontend:
+  backend:
+
+volumes:
+  db-data:
+```
+
+Uruchaiany aplkacje z pliku stack.yml na clustrze swarm:
+docker@node1:~$ `docker stack deploy -c stack.yml`   
+```
+voteapp                                                                                                
+Creating network voteapp_default
+Creating network voteapp_frontend
+Creating network voteapp_backend
+Creating service voteapp_worker
+Creating service voteapp_visualizer
+Creating service voteapp_redis
+Creating service voteapp_db
+Creating service voteapp_vote
+Creating service voteapp_result
+```
+`docker service ls`  
+```
+ID                  NAME                 MODE                REPLICAS            IMAGE                                       PORTS
+nhm0k4cw753e        voteapp_db           replicated          1/1                 postgres:9.4                                
+tdjvoa5mt1rq        voteapp_redis        replicated          1/1                 redis:alpine                                *:30000->6379/tcp
+4c7t0f52a6r5        voteapp_result       replicated          1/1                 bretfisher/examplevotingapp_result:latest   *:5001->80/tcp
+lmxrfr88ovlw        voteapp_visualizer   replicated          1/1                 dockersamples/visualizer:latest             *:8080->8080/tcp
+z1xr6o3gllp8        voteapp_vote         replicated          2/2                 bretfisher/examplevotingapp_vote:latest     *:5000->80/tcp
+v5ygaih8z1c5        voteapp_worker       replicated          1/1                 bretfisher/examplevotingapp_worker:java     
+```
+
+`docker stack ls `  
+```
+NAME                SERVICES            ORCHESTRATOR
+voteapp             6                   Swarm
+```
+`docker stack ps voteapp`  
+```
+ID                  NAME                   IMAGE                                       NODE                DESIRED STATE       CURRENT STATE            ERROR               PORTS
+8cwmki8qekt2        voteapp_result.1       bretfisher/examplevotingapp_result:latest   node2               Running             Running 29 minutes ago                       
+dh89z4lvnfcm        voteapp_vote.1         bretfisher/examplevotingapp_vote:latest     node1               Running             Running 32 minutes ago                       
+omhnhsiar1le        voteapp_db.1           postgres:9.4                                node1               Running             Running 31 minutes ago                       
+z3pu0mfzxmln        voteapp_redis.1        redis:alpine                                node2               Running             Running 31 minutes ago                       
+3jo6vnei6dgp        voteapp_visualizer.1   dockersamples/visualizer:latest             node2               Running             Running 27 minutes ago                       
+uffrdgxst2d8        voteapp_worker.1       bretfisher/examplevotingapp_worker:java     node1               Running             Running 33 minutes ago                       
+2cucguhasq80        voteapp_vote.2         bretfisher/examplevotingapp_vote:latest     node2               Running             Running 32 minutes ago
+```
+`docker container ls`  
+```
+CONTAINER ID        IMAGE                                     COMMAND                  CREATED             STATUS              PORTS               NAMES
+a25dee6cedc8        postgres:9.4                              "docker-entrypoint.s…"   48 minutes ago      Up 48 minutes       5432/tcp            voteapp_db.1.omhnhsiar1le7ll04cpgj9poy
+429bb60a3db3        bretfisher/examplevotingapp_vote:latest   "gunicorn app:app -b…"   50 minutes ago      Up 50 minutes       80/tcp              voteapp_vote.1.dh89z4lvnfcm1kycca7a8ck87
+df6b528a89fa        bretfisher/examplevotingapp_worker:java   "java -XX:+UnlockExp…"   50 minutes ago      Up 50 minutes                           voteapp_worker.1.uffrdgxst2d8nf7v1ukl9adv0
+
+```
+`docker stack services voteapp`  
+```
+ID                  NAME                 MODE                REPLICAS            IMAGE                                       PORTS
+4c7t0f52a6r5        voteapp_result       replicated          1/1                 bretfisher/examplevotingapp_result:latest   *:5001->80/tcp
+lmxrfr88ovlw        voteapp_visualizer   replicated          1/1                 dockersamples/visualizer:latest             *:8080->8080/tcp
+nhm0k4cw753e        voteapp_db           replicated          1/1                 postgres:9.4                                
+tdjvoa5mt1rq        voteapp_redis        replicated          1/1                 redis:alpine                                *:30000->6379/tcp
+v5ygaih8z1c5        voteapp_worker       replicated          1/1                 bretfisher/examplevotingapp_worker:java     
+z1xr6o3gllp8        voteapp_vote         replicated          2/2                 bretfisher/examplevotingapp_vote:latest     *:5000->80/tcp
+```
