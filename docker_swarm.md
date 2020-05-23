@@ -675,3 +675,71 @@ CONTAINER ID        IMAGE               COMMAND                  CREATED        
 5446133f587a        postgres            "docker-entrypoint.s…"   40 seconds ago      Up 38 seconds (healthy)   5432/tcp            p2
 5e48e1cba9af        postgres            "docker-entrypoint.s…"   2 minutes ago       Up 2 minutes              5432/tcp            p1
 ```
+
+### Docker registry  
+Dzisiaj pobawimy sie na stronie dockera:  
+https://labs.play-with-docker.com/  
+stworzymy 5 nodowy cluster managerow. :)  
+manager 1:
+```
+ docker node ls
+ID                            HOSTNAME            STATUS              AVAILABILITY        MANAGER STATUS      ENGINE VERSION
+vbqfeojcmbyw662ry9785s40w *   manager1            Ready               Active              Reachable           19.03.4
+h6jyd8x096uw9xbna0dmkfseu     manager2            Ready               Active              Leader              19.03.4
+y4gsr0carxe3mchqzl8e37zk8     manager3            Ready               Active              Reachable           19.03.4
+briuykxzi7scdzijgii0qnhtl     manager4            Ready               Active              Reachable           19.03.4
+u5k85iu4a3zbjvvsnx2i6q5qa     manager5            Ready               Active              Reachable           19.03.4
+```
+`docker service create --name registry --publish 5000:5000 registry` 
+
+`docker service ls`  
+```
+ocker service ls
+ID                  NAME                MODE                REPLICAS            IMAGE               PORTS
+w9k1k4soyaa1        registry            replicated          1/1                 registry:latest     *:5000->5000/tcp
+```
+`docker service ps registry`  
+```
+D                  NAME                IMAGE               NODE                DESIRED STATE       CURRENT STATE            ERROR               PORTS
+qaloh694qwa7        registry.1          registry:latest     manager2            Running             Running 31 seconds ago  
+```                     
+sprawdzamy repozytory z poziomu przegladarki:  
+http://ip172-18-0-100-br4f07dim9m000as6qfg-5000.direct.labs.play-with-docker.com/v2/_catalog  
+widac puste registry/repo
+{"repositories":[]}
+
+pobieramy lekki obraz:  
+`docker pull hello-world`  
+tagujemy go odpowiednim formatem przed wrzuceniem do lokalnego registry/repo musimy uzyc tagu 127.0.0.1:500/nazwa_obrazu  
+`docker tag hello-world 127.0.0.1:5000/hello-world`  
+pushujemy   
+`docker push 127.0.0.1:5000/hello-world`  
+```
+The push refers to repository [127.0.0.1:5000/hello-world]
+9c27e219663c: Pushed 
+latest: digest: sha256:90659bf80b44ce6be8234e6ff90a1ac34acbeb826903b02cfa0da11c82cbc042 size: 525
+```
+
+sprawdzamy registry/repo z poziomu przegladarki:
+http://ip172-18-0-100-br4f07dim9m000as6qfg-5000.direct.labs.play-with-docker.com/v2/_catalog  
+
+{"repositories":["hello-world"]}  
+
+powtarzamy wszystko z nginxem:
+`docker pull nginx`  
+`docker tag nginx 127.0.0.1:5000/nginx`  
+`docker push 127.0.0.1:5000/nginx`  
+
+
+`docker service create --name nginx -p 80:80 --replicas 5 --detach=false 127.0.0.1:5000/nginx`  
+
+`docker service ps nginx`  
+```
+ID                  NAME                IMAGE                         NODE                DESIRED STATE       CURRENT STATE                ERROR               PORTS
+9d7ntlxhzd2i        nginx.1             127.0.0.1:5000/nginx:latest   manager5            Running             Running 59 seconds ago                           
+t51zddzthwh8        nginx.2             127.0.0.1:5000/nginx:latest   manager2            Running             Running 59 seconds ago                           
+tn60lzwjrtou        nginx.3             127.0.0.1:5000/nginx:latest   manager3            Running             Running 59 seconds ago                           
+mfbyem3eewlr        nginx.4             127.0.0.1:5000/nginx:latest   manager4            Running             Running about a minute ago                       
+qaq0pf504br4        nginx.5             127.0.0.1:5000/nginx:latest   manager1            Running             Running about a minute ago              
+```
+
